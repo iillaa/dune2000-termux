@@ -1,33 +1,36 @@
 Windows Registry Editor Version 5.00
 
 [HKEY_LOCAL_MACHINE\Software\Westwood\Dune 2000]
-"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 "Version"="1.06"
-"FolderPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"FolderPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 "SKU"=dword:00000e00
 
 [HKEY_LOCAL_MACHINE\Software\Westwood\Dune 2000\1.00.0000]
-"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 
 [HKEY_LOCAL_MACHINE\Software\Westwood\Register]
-"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 
 [HKEY_LOCAL_MACHINE\Software\Wow6432Node\Westwood\Dune 2000]
-"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 "Version"="1.06"
-"FolderPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"FolderPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 "SKU"=dword:00000e00
 
 [HKEY_LOCAL_MACHINE\Software\Wow6432Node\Westwood\Dune 2000\1.00.0000]
-"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 
 [HKEY_LOCAL_MACHINE\Software\Wow6432Node\Westwood\Register]
-"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 
 [HKEY_CURRENT_USER\Software\Westwood\Dune 2000]
-"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 "Version"="1.06"
 
 [HKEY_CURRENT_USER\Software\Wow6432Node\Westwood\Dune 2000]
-"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000"
+"InstallPath"="C:\\Program Files (x86)\\Gruntmods Studios\\Dune 2000\\"
 "Version"="1.06"
+
+[HKEY_CURRENT_USER\Software\Wine\DirectSound]
+"HardwareAcceleration"="Emulation"

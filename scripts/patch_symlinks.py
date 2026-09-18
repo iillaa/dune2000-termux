@@ -50,6 +50,20 @@ def patch_game_directory(game_dir):
             except OSError as e:
                 print(f"  Warning linking {link_name}: {e}")
 
+    # Create parent folder symlinks in case InstallPath lacked trailing backslash
+    parent_dir = os.path.dirname(os.path.abspath(game_dir))
+    base_dir_name = os.path.basename(os.path.abspath(game_dir))
+    if base_dir_name.lower() == "dune 2000" and os.path.isdir(parent_dir):
+        for sub in ["music", "data", "Movies"]:
+            target_sub = os.path.join(game_dir, sub)
+            link_sub = os.path.join(parent_dir, base_dir_name + sub)
+            if os.path.exists(target_sub) and not os.path.exists(link_sub):
+                try:
+                    os.symlink(os.path.join(base_dir_name, sub), link_sub)
+                    print(f"  Linked parent fallback: {os.path.basename(link_sub)} -> {base_dir_name}/{sub}")
+                except OSError:
+                    pass
+
     # 2. Case-folding symlinks (lowercase versions of all files & folders)
     print("\n[2/3] Generating case-folding symlinks...")
     case_created = 0
@@ -99,7 +113,8 @@ def patch_game_directory(game_dir):
             with open(cfg_path, "rb") as f:
                 cfg_data = bytearray(f.read())
             if len(cfg_data) > 0 and cfg_data[0] == 0:
-                cfg_data[0] = 10
+                cfg_data[0] = 100
+                cfg_data[1] = 100
                 with open(cfg_path, "wb") as f:
                     f.write(cfg_data)
                 print("  Unmuted Byte 0 (Music Volume) from 0 to 10 in dune2000.cfg.")

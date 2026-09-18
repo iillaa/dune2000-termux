@@ -10,9 +10,23 @@ pkill -9 -f Dune2000 2>/dev/null
 pkill -9 -f DUNE2000 2>/dev/null
 sleep 1
 
-# 2. Ensure PulseAudio daemon is running with TCP module for Wine
-pulseaudio --start --exit-idle-time=-1 --load="module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1" 2>/dev/null
-pactl load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 2>/dev/null
+# 2. Ensure PulseAudio daemon is running
+if ! pgrep -f "pulseaudio" >/dev/null; then
+    pulseaudio --start --exit-idle-time=-1 2>/dev/null
+fi
+pactl unload-module module-suspend-on-idle 2>/dev/null || true
+
+# Setup direct UNIX domain socket for lowest latency and clean audio
+PULSE_SOCK=$(ls -d /data/data/com.termux/files/usr/tmp/pulse-*/native 2>/dev/null | head -n 1)
+if [ -n "$PULSE_SOCK" ] && [ -S "$PULSE_SOCK" ]; then
+    ln -sfn "$PULSE_SOCK" /data/data/com.termux/files/usr/tmp/pulse-native
+    export PULSE_SERVER="unix:/data/data/com.termux/files/usr/tmp/pulse-native"
+else
+    if ! pactl list modules short 2>/dev/null | grep -q "module-native-protocol-tcp"; then
+        pactl load-module module-native-protocol-tcp auth-ip-acl=127.0.0.1 auth-anonymous=1 2>/dev/null
+    fi
+    export PULSE_SERVER="127.0.0.1"
+fi
 
 # 3. Ensure Termux-X11 display server is running
 if ! pgrep -f "termux-x11.*:0" >/dev/null; then
@@ -28,8 +42,7 @@ am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1
 export DISPLAY=:0
 export WINEPREFIX="/data/data/com.termux/files/home/chat/dune/prefix"
 export WINEDEBUG=-all
-export PULSE_SERVER=127.0.0.1
-export PULSE_LATENCY_MSEC=120
+export PULSE_LATENCY_MSEC=60
 
 # Adreno 650 Hardware GPU Acceleration (Turnip Vulkan + Zink OpenGL)
 export MESA_LOADER_DRIVER_OVERRIDE=zink
