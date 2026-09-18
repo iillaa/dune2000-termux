@@ -1,81 +1,79 @@
 # Development & Diagnostic Progress Log
 
-This document records the exact reverse-engineering findings, root-cause analyses, and solutions developed to get *Dune 2000* running at full speed on Android via Termux.
+This document records the exact reverse-engineering findings, root-cause analyses, environment configurations, and solutions developed to run *Dune 2000* natively on Android via Termux.
 
 ---
 
-## Phase 1: Environment & Execution Model
+## Architecture & File Reference
 
-### 1. Eliminating PRoot Overhead
-- **Problem**: Running Windows games through PRoot containers adds severe syscall translation latency, breaks GPU shared memory mappings, and degrades frame rates.
-- **Solution**: Deployed native ARM64 `hangover-wine` and `hangover-wowbox64` directly in Termux user-space.
+### 1. File & Directory Index
 
-### 2. Eliminating Ghost Processes & Freeing Memory
-- **Problem**: Available RAM dropped to 1.7 GB, causing out-of-memory killed processes.
-- **Root Cause**: Discovered an Electron/Chromium installer process (`New Spice Launcher.exe`) running 5 hidden child processes in the background consuming 700 MB RAM.
-- **Solution**: Terminated all orphan installer processes, immediately restoring free RAM from 1.7 GB to 2.6 GB.
+| Component | Absolute Path | Purpose |
+| :--- | :--- | :--- |
+| **Git Repository** | `~/chat/dune2000-termux/` | Version-controlled configuration, scripts, and documentation |
+| **Active Game Root** | `~/chat/dune/prefix/drive_c/Program Files (x86)/Gruntmods Studios/Dune 2000/` | Main game assets, binaries, and local configs |
+| **Wine Prefix** | `~/chat/dune/prefix/` | 64-bit Wine prefix for `hangover-wine` |
+| **Launcher Script** | `~/chat/dune/play_dune2000.sh` | Main launch script with CPU affinity, X11, and audio setup |
+| **Stop Script** | `~/chat/dune/stop_dune2000.sh` | Gracefully terminates Wine, X11, and orphaned processes |
+| **Master ddraw.ini** | `~/chat/dune/ddraw.ini` | Master `cnc-ddraw` config copied to game root on launch |
+| **Game Executable** | `.../Dune 2000/DUNE2000.DAT` | 32-bit x86 Westwood engine binary (executed by Wine via Box64) |
+| **Sound System** | `.../Dune 2000/MSS32.DLL` | Miles Sound System 32-bit audio library |
+| **Music Tracks** | `.../Dune 2000/data/Music/*.aud` | Authentic Frank Klepacki CD soundtrack (symlinked to `music/`) |
+| **Sound Effects** | `.../Dune 2000/data/GAMESFX/*.aud` | Authentic Westwood combat & UI sound effects |
+| **Voice Lines** | `.../Dune 2000/data/GAMESFXEng/*.aud`| English spoken unit announcements and responses |
+| **Campaign Missions**| `.../Dune 2000/data/Missions/` | Mission files (`H1V1.mis`, `H1V1.map`, `H1V1.ini`, etc.) |
+| **FMV Cutscenes** | `.../Dune 2000/movies/*.VQA` | Westwood Vector Quantized Animation cutscenes |
+| **Widget Shortcuts** | `~/.shortcuts/Dune2000_Start.sh` | Android home screen launcher via Termux:Widget |
 
----
+### 2. Environment Variables Reference
 
-## Phase 2: Video Decoding & Graphics Acceleration
-
-### 3. Westwood VQA Macroblock Corruption
-- **Problem**: Cutscenes suffered heavy macroblock decoding artifacts, square pixel noise, and distorted colors.
-- **Root Cause**: Box64's Dynarec had aggressive arithmetic flag optimizations enabled (`BOX64_DYNAREC_SAFEFLAGS=0`), which incorrectly calculated carry flags during Westwood's vector quantization video decoding.
-- **Solution**: Set `BOX64_DYNAREC_SAFEFLAGS=1`. VQA playback rendered pixel-perfect.
-
-### 4. Horizontal Scanline Tearing
-- **Problem**: In-game menus and video had subtle horizontal scanline shearing.
-- **Root Cause**: The `vhack` option in `cnc-ddraw` attempted to emulate CRT scanline vertical blank synchronization, conflicting with Android's Wayland surface compositor.
-- **Solution**: Set `vhack = false` in `ddraw.ini`.
-
-### 5. Display Aspect Ratio & Centering
-- **Problem**: Initial display was confined to a small 640x400 box in the screen corner.
-- **Solution**: Set `boxing = false` and `maintas = true` with `renderer = opengl` in `ddraw.ini`. Scaled the display vertically to 1150px while maintaining the authentic 4:3 Westwood aspect ratio.
-
----
-
-## Phase 3: CPU Multi-Core Performance
-
-### 6. Single-Core Bottleneck Lock
-- **Problem**: Frame rates dropped during gameplay, and threads stayed pinned to CPU 0 (1.8 GHz Little core).
-- **Reverse-Engineering**: Disassembled `DUNE2000.DAT` at `0x8fef89`. Found that the engine checks `SingleProcessorAffinity` in `dune2000.ini`, and defaults to `1`, calling `SetProcessAffinityMask(1)`.
-- **Solution**: Added `SingleProcessorAffinity=0` to `dune2000.ini`. Pinned Wine execution to Snapdragon 870 Big Cores (4, 5, 6, 7) via `taskset -c 4-7`. CPU usage scaled past 100% across multi-core.
-
----
-
-## Phase 4: Mission Loading & Filesystem Fixes
-
-### 7. Missing Westwood Windows Registry Keys
-- **Problem**: Transitioning from House Selection to Mission Briefing locked up with `NO_REGISTRY` errors.
-- **Root Cause**: Engine queries `HKEY_LOCAL_MACHINE\Software\Westwood\Dune 2000\InstallPath` to locate assets. No Westwood keys existed in the Wine prefix.
-- **Solution**: Injected `Software\Westwood\Dune 2000` and `Software\Wow6432Node\Westwood\Dune 2000` keys into `system.reg`.
-
-### 8. The Missing Mission Files Prefix Bug
-- **Problem**: The game froze indefinitely on the territory map screen, unable to load Mission 1.
-- **Root Cause**: Disassembled `DUNE2000.DAT` at `0x4708e0` / `0xe1690` and found the format string `%c%dV%d.mis`. The engine explicitly looks for `H1V1.mis`. However, the community installer extracted all 844 mission files with a leading underscore (e.g. `_H1V1.MIS`). Because Linux filesystems are case-sensitive, file lookups failed completely.
-- **Solution**: Wrote a script creating 844 un-underscored symlinks (e.g. `H1V1.mis -> _H1V1.MIS`), resolving the mission loading freeze.
-
-### 9. Linux Case-Sensitivity across 13,900+ Game Assets
-- **Problem**: The game failed to load UI regions (`h1.bmp` vs `H1.BMP`), fonts, and sounds.
-- **Solution**: Built a recursive case-folding mapper generating 13,947 lowercase and canonical symlinks across `data/`, `movies/`, and the prefix.
+```bash
+DISPLAY=:0                                              # Termux-X11 display socket
+WINEPREFIX="/data/data/com.termux/files/home/chat/dune/prefix"
+WINEDEBUG=-all                                          # Suppress noisy Wine debug logs for performance
+PULSE_SERVER="unix:/data/data/com.termux/files/usr/tmp/pulse-native"  # Low-latency UNIX domain socket
+PULSE_LATENCY_MSEC=60                                   # Audio buffer latency target
+MESA_LOADER_DRIVER_OVERRIDE=zink                        # Vulkan to OpenGL translation
+GALLIUM_DRIVER=zink                                     # Adreno 650 hardware acceleration
+BOX64_DYNAREC=1                                         # Enable dynamic recompiler
+BOX64_DYNAREC_SAFEFLAGS=1                               # Accurate arithmetic flags for VQA video decoding
+BOX64_DYNAREC_FASTROUND=1
+BOX64_DYNAREC_FASTNAN=1
+BOX64_DYNAREC_STRONGMEM=0
+```
 
 ---
 
-## Phase 5: Audio & Sound Effects
+## Chronological Progress & Diagnostic Findings
 
-### 10. The "Harkonen... Harkonen" Loop Bug
-- **Problem**: Audio stuttered and repeated the last spoken word in an infinite loop.
-- **Root Cause**: DirectSound Circular Ring Buffer Underrun. When the engine thread stalled waiting for missing mission files, it stopped feeding new audio chunks. The audio driver kept playing the remaining buffer cyclically.
+### Phase 1: Environment & Execution Model
+1. **Eliminated PRoot Overhead**: Native ARM64 `hangover-wine` and `hangover-wowbox64` running directly in Termux user-space without PRoot containers.
+2. **Eliminated Zombie Electron Processes**: Found and killed 5 hidden instances of `New Spice Launcher.exe` consuming 700 MB RAM, restoring free memory to 2.6 GB.
 
-### 11. Silent Music in Battles
-- **Problem**: Stage 1 battlefield had sound effects but zero background music.
-- **Root Cause 1**: In `dune2000.cfg`, Byte 0 (Music Volume) was initialized to `0` (muted).
-- **Root Cause 2**: At engine boot, `_findfirst("music")` checks the root game directory. Gruntmods stored files in `data/Music/`. Because `music` didn't exist in root, the engine disabled the music subsystem.
-- **Solution**: Unmuted Byte 0 to `10` in `dune2000.cfg`, configured `MusicVolume=100` and `PlayRandomSong=1` in `dune2000.ini`, and symlinked `music -> data/Music`.
+### Phase 2: Video Decoding & Graphics
+3. **VQA Video Macroblock Corruption**: Box64 flag optimization (`BOX64_DYNAREC_SAFEFLAGS=0`) corrupted Westwood vector quantization decoding. Fixed with `BOX64_DYNAREC_SAFEFLAGS=1`.
+4. **Horizontal Scanline Shearing**: Emulated CRT sync (`vhack = true`) in `cnc-ddraw` conflicted with Wayland compositor. Fixed with `vhack = false`.
+5. **Renderer Optimization**: `renderer = gdi` with `filter = nearest` eliminates CPU bilinear filter overhead over 5.1M pixels (`2944x1725`), maintaining locked 60 FPS.
 
-### 12. Machine-Gun Looping SFX Fix
-- **Problem**: Sound effects repeated rapidly during combat like gunfire.
-- **Root Cause 1**: `PULSE_LATENCY_MSEC=60` was too low for Android TCP loopback, triggering secondary buffer underruns.
-- **Root Cause 2**: A background polling daemon was running `taskset -pc` across all 25 threads every second, context-switching the CPU and interrupting the real-time audio thread.
-- **Solution**: Removed the thread watcher daemon and raised `PULSE_LATENCY_MSEC` to `120ms`.
+### Phase 3: CPU Multi-Core Scaling
+6. **Single-Core Affinity Lock**: Disassembled `DUNE2000.DAT` at `0x8fef89` and discovered `SingleProcessorAffinity=1` locks process to CPU 0. Set `SingleProcessorAffinity=0` and pinned to Snapdragon 870 Big Cores (`taskset -c 4-7`).
+
+### Phase 4: Filesystem Case-Sensitivity & Asset Resolving
+7. **The Mission Underscore Bug**: Community installer extracted 844 mission files as `_H1V1.MIS`, whereas the engine looks for `H1V1.mis`. Generated un-underscored symlinks.
+8. **Case Sensitivity**: Generated 13,900+ case-folding symlinks so the engine can locate assets regardless of uppercase/lowercase.
+
+### Phase 5: Audio Diagnostics & Findings
+9. **Reverse-Engineered Music Loading**:
+   - Disassembly at `0x6fd5f` showed `CUIManager()` constructs `%smusic` using `InstallPath` from `HKLM\Software\Westwood\Dune 2000`.
+   - Lacking a trailing backslash produced `.../Dune 2000music`, which failed `FindFirstFileA`.
+   - Fixed by adding trailing backslashes in registry and adding fallback symlinks.
+10. **Audio Looping Root-Cause Analysis**:
+   - Symptoms: Mouse hover over menu buttons creates a "tek" sound that gets trapped in the buffer and loops every 1–2s. Combat SFX (gunshots) also loop endlessly.
+   - Mechanism: DirectSound circular mixing buffers under Miles Sound System (`mss32.dll`) encounter an uncleared ring buffer in Termux PulseAudio's `module-sles-sink` (OpenSL ES) on Android 14.
+   - Wine DirectSound switched to `HardwareAcceleration=Emulation` to force software mixing.
+   - PulseAudio switched to direct UNIX domain socket (`PULSE_SERVER=unix:.../pulse-native`).
+
+### Phase 6: Mission End Hard Crash (New Finding)
+11. **Mission 1 Victory Crash**:
+   - Upon completing the objective in Mission 1 (Harkonnen), the game abruptly exits.
+   - Immediate suspects: Post-mission cutscene lookup, victory fanfare audio crash, or territory map transition.
